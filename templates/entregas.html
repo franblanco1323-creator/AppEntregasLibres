@@ -267,68 +267,91 @@
             }
         }
 
-        let watchId = null;
+               let watchId = null;
         let intervaloChequeo = null; 
 
         function activarGPS() {
+            // Buscamos el botón de GPS de forma segura
             const btn = document.getElementById('btn-gps');
-            if (!btn) return; // Si no existe el botón en la PC, no hace nada
-
+            
             if (watchId) {
+                // Si ya está activo, lo apagamos
                 navigator.geolocation.clearWatch(watchId);
                 clearInterval(intervaloChequeo);
                 watchId = null;
-                btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
-                btn.style.backgroundColor = "#dc3545";
+                if (btn) {
+                    btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
+                    btn.style.backgroundColor = "#dc3545";
+                }
                 alert("Seguimiento pausado.");
             } else {
+                // Si está apagado, lo encendemos
                 if (navigator.geolocation) {
                     watchId = navigator.geolocation.watchPosition((position) => {
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
+                        
+                        // Enviamos al servidor. Usamos try/catch para que si falla, no rompa todo
                         fetch('/api/ubicacion', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ lat: lat, lon: lon })
-                        });
+                        }).catch(err => console.log("Esperando red..."));
+                        
                     }, (error) => {
-                        alert("Error al obtener GPS.");
-                    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
+                        console.log("Error de GPS: ", error.message);
+                        alert("Error al obtener GPS. Revisá los permisos del navegador.");
+                    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 });
                     
+                    // Chequeo remoto de apagado
                     intervaloChequeo = setInterval(async () => {
-                        const res = await fetch('/api/ubicacion/estado');
-                        const data = await res.json();
-                        if (data.apagar) {
-                            navigator.geolocation.clearWatch(watchId);
-                            clearInterval(intervaloChequeo);
-                            watchId = null;
-                            btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
-                            btn.style.backgroundColor = "#dc3545";
-                            alert("⚠️ La oficina ha detenido el seguimiento de forma remota.");
-                        }
+                        try {
+                            const res = await fetch('/api/ubicacion/estado');
+                            const data = await res.json();
+                            if (data.apagar) {
+                                navigator.geolocation.clearWatch(watchId);
+                                clearInterval(intervaloChequeo);
+                                watchId = null;
+                                if (btn) {
+                                    btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
+                                    btn.style.backgroundColor = "#dc3545";
+                                }
+                                alert("⚠️ La oficina ha detenido el seguimiento de forma remota.");
+                            }
+                        } catch (e) {}
                     }, 10000);
                     
-                    btn.innerText = "🛑 Detener Seguimiento (GPS Activo)";
-                    btn.style.backgroundColor = "#28a745";
-                    alert("Seguimiento activado.");
+                    if (btn) {
+                        btn.innerText = "🛑 Detener Seguimiento (GPS Activo)";
+                        btn.style.backgroundColor = "#28a745";
+                    }
+                    alert("Seguimiento activado. Mantené la pantalla encendida.");
+                } else {
+                    alert("Tu navegador no soporta GPS.");
                 }
             }
         }
         
-        // Actualizar posición del repartidor en la PC
-                let marcadorRepartidor = null;
+        // Actualizar posición en la PC de la oficina
+        let marcadorRepartidor = null;
         async function actualizarUbicacionRepartidor() {
             try {
                 const res = await fetch('/api/ubicacion');
+                // Si el servidor devuelve error 401 (deslogueado) o 500, salimos silenciosamente
+                if (!res.ok) return; 
+                
                 const data = await res.json();
                 
-                if (data.latitud && data.longitud) {
+                // Verificamos que el mapa realmente esté visible en pantalla
+                const mapaPadre = document.getElementById('mapa-padre');
+                const mapaVisible = mapaPadre && mapaPadre.offsetParent !== null;
+
+                if (data.latitud && data.longitud && mapaVisible) {
                     const iconoRepartidor = L.divIcon({
                         html: '<div style="font-size: 30px;">🚗</div>',
                         className: 'custom-icon', iconSize: [30, 30], iconAnchor: [15, 15]
                     });
 
-                    // Verificamos que el mapa exista antes de intentar poner el marcador
                     if (marcadorRepartidor && map.hasLayer(marcadorRepartidor)) {
                         marcadorRepartidor.setLatLng([data.latitud, data.longitud]);
                     } else {
@@ -337,9 +360,11 @@
                     }
                 }
             } catch (e) {
-                console.log("Esperando datos del repartidor...");
+                // Ignoramos errores de red de fondo
             }
         }
+        
+        // Consultamos cada 15 segundos
         setInterval(actualizarUbicacionRepartidor, 15000);
     </script>
 </body>
