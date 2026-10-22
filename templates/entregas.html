@@ -91,13 +91,15 @@
         🛑 Detener GPS del Repartidor (Solo Oficina)
     </button>
 
-    <!-- Botón para iniciar GPS (Oculto por defecto) -->
-    <button onclick="activarGPS()" id="btn-gps" style="display: none; width: 100%; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 15px;">
-        📡 Iniciar Seguimiento (Modo Repartidor)
-    </button>
-
-    <!-- Botón para mostrar/ocultar (Solo celular) -->
-    <button class="btn-toggle-lista" onclick="toggleVistas()" id="btn-toggle">▼ Mostrar Mapa y Ruta</button>
+      <!-- Botones de control de GPS (Solo Oficina) -->
+    <div id="panel-oficina" style="display: none; margin-bottom: 15px;">
+        <button onclick="encenderRepartidor()" id="btn-encender" style="width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 5px;">
+            📡 Iniciar Seguimiento del Repartidor
+        </button>
+        <button onclick="detenerRepartidor()" id="btn-detener" style="width: 100%; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px; font-weight: bold;">
+            🛑 Detener Seguimiento del Repartidor
+        </button>
+    </div>
 
     <div class="contenedor-principal">
         <!-- Lista -->
@@ -274,85 +276,89 @@
             }
         }
 
-               let watchId = null;
-        let intervaloChequeo = null; 
+                     // ==========================================
+        // LÓGICA DEL GPS (REMOTO)
+        // ==========================================
+        
+        // Mostrar el panel de la oficina solo en la PC
+        window.addEventListener('load', () => {
+            if (window.innerWidth > 768) {
+                document.getElementById('panel-oficina').style.display = 'block';
+            }
+        });
 
-        function activarGPS() {
-            // Buscamos el botón de GPS de forma segura
-            const btn = document.getElementById('btn-gps');
-            
-            if (watchId) {
-                // Si ya está activo, lo apagamos
-                navigator.geolocation.clearWatch(watchId);
-                clearInterval(intervaloChequeo);
-                watchId = null;
-                if (btn) {
-                    btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
-                    btn.style.backgroundColor = "#dc3545";
-                    btn.style.display = 'block'; // <-- AGREGÁ ESTA LÍNEA ACÁ
-                }
-                alert("Seguimiento pausado.");
-            } else {
-                // Si está apagado, lo encendemos
-                if (navigator.geolocation) {
-                    watchId = navigator.geolocation.watchPosition((position) => {
-                        const lat = position.coords.latitude;
-                        const lon = position.coords.longitude;
+        // Variables para el celular
+        let watchId = null;
+        let intervaloChequeo = null;
+
+        // El celular revisa cada 5 segundos si le diste la orden de encender
+        setInterval(async () => {
+            // Si estamos en la PC, ignoramos esto
+            if (window.innerWidth > 768) return; 
+
+            try {
+                const res = await fetch('/api/ubicacion/estado');
+                const data = await res.json();
+                
+                // Si la oficina dijo "Encender"
+                if (data.encender && !watchId) {
+                    // Intentamos encender el GPS
+                    if (navigator.geolocation) {
+                        watchId = navigator.geolocation.watchPosition((position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            fetch('/api/ubicacion', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ lat: lat, lon: lon })
+                            }).catch(err => console.log("Esperando red..."));
+                        }, (error) => {
+                            console.log("Error de GPS: ", error.message);
+                        }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 });
                         
-                        // Enviamos al servidor. Usamos try/catch para que si falla, no rompa todo
-                        fetch('/api/ubicacion', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ lat: lat, lon: lon })
-                        }).catch(err => console.log("Esperando red..."));
-                        
-                    }, (error) => {
-                        console.log("Error de GPS: ", error.message);
-                        alert("Error al obtener GPS. Revisá los permisos del navegador.");
-                    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 });
-                    
-                    // Chequeo remoto de apagado
-                    intervaloChequeo = setInterval(async () => {
-                        try {
-                            const res = await fetch('/api/ubicacion/estado');
-                            const data = await res.json();
-                            if (data.apagar) {
-                                navigator.geolocation.clearWatch(watchId);
-                                clearInterval(intervaloChequeo);
-                                watchId = null;
-                                if (btn) {
-                                    btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
-                                    btn.style.backgroundColor = "#dc3545";
-                                    btn.style.display = 'block'; // <-- AGREGAR ESTA LÍNEA
-                                }
-                                alert("⚠️ La oficina ha detenido el seguimiento de forma remota.");
-                            }
-                        } catch (e) {}
-                    }, 10000);
-                    
-                    if (btn) {
-                        btn.innerText = "🛑 Detener Seguimiento (GPS Activo)";
-                        btn.style.backgroundColor = "#28a745";
-                        btn.style.display = 'none'; 
+                        console.log("GPS encendido remotamente");
                     }
-                    alert("Seguimiento activado. Mantené la pantalla encendida.");
-                } else {
-                    alert("Tu navegador no soporta GPS.");
+                }
+                
+                // Si la oficina dijo "Apagar"
+                if (data.apagar && watchId) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                    console.log("GPS apagado remotamente");
+                }
+            } catch (e) {}
+        }, 5000);
+
+        // ==========================================
+        // FUNCIONES DE LA OFICINA (PC)
+        // ==========================================
+        
+        async function encenderRepartidor() {
+            await fetch('/api/ubicacion/encender', { method: 'POST' });
+            alert("Se envió la orden. El GPS del repartidor se encenderá en los próximos segundos.");
+        }
+
+        async function detenerRepartidor() {
+            if(confirm("¿Seguro que querés detener el seguimiento del repartidor?")) {
+                await fetch('/api/ubicacion/apagar', { method: 'POST' });
+                alert("Se envió la orden. El celular del repartidor apagará el GPS en los próximos segundos.");
+                if (window.marcadorRepartidor) {
+                    map.removeLayer(window.marcadorRepartidor);
+                    window.marcadorRepartidor = null;
                 }
             }
         }
-        
-        // Actualizar posición en la PC de la oficina
+
+        // Actualizar posición en la PC de la oficina (igual que antes)
         let marcadorRepartidor = null;
         async function actualizarUbicacionRepartidor() {
+            if (window.innerWidth <= 768) return; // Solo funciona en la PC
+            
             try {
                 const res = await fetch('/api/ubicacion');
-                // Si el servidor devuelve error 401 (deslogueado) o 500, salimos silenciosamente
                 if (!res.ok) return; 
-                
                 const data = await res.json();
                 
-                // Verificamos que el mapa realmente esté visible en pantalla
                 const mapaPadre = document.getElementById('mapa-padre');
                 const mapaVisible = mapaPadre && mapaPadre.offsetParent !== null;
 
@@ -369,31 +375,10 @@
                         marcadorRepartidor.bindPopup("<b>Repartidor en camino</b>");
                     }
                 }
-            } catch (e) {
-                // Ignoramos errores de red de fondo
-            }
+            } catch (e) {}
         }
         
-        // Consultamos cada 15 segundos
         setInterval(actualizarUbicacionRepartidor, 15000);
-                // ==========================================
-        // LÓGICA DE VISIBILIDAD SEGÚN EL DISPOSITIVO
-        // ==========================================
-        window.addEventListener('load', () => {
-            const esComputadora = window.innerWidth > 768;
-            const btnOficina = document.getElementById('btn-detener-gps');
-            const btnRepartidor = document.getElementById('btn-gps');
-
-            if (esComputadora) {
-                // Si estoy en la PC, muestro solo el botón de la oficina
-                if (btnOficina) btnOficina.style.display = 'block';
-                if (btnRepartidor) btnRepartidor.style.display = 'none';
-            } else {
-                // Si estoy en el celular, muestro solo el botón del repartidor
-                if (btnOficina) btnOficina.style.display = 'none';
-                if (btnRepartidor) btnRepartidor.style.display = 'block';
-            }
-        });
     </script>
 </body>
 </html>
