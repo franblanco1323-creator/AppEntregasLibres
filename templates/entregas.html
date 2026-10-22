@@ -58,6 +58,8 @@
             .lista-entregas, .mapa-contenedor { width: 100%; min-width: 100%; }
             .mapa-contenedor { display: none !important; } /* Oculto por defecto en celular */
             #map { height: 400px; }
+            #btn-gps { display: block !important; }
+            
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
@@ -84,9 +86,14 @@
         <button onclick="agregarEntrega()" style="background: #0056b3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer;">Guardar Destino</button>
     </div>
 
-    <!-- Botón para detener GPS (Solo visible en PC) -->
+      <!-- Botón para detener GPS (Solo visible en PC) -->
     <button onclick="detenerRepartidor()" id="btn-detener-gps" style="width: 100%; padding: 10px; background: #ffc107; color: black; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 15px;">
         🛑 Detener GPS del Repartidor (Solo Oficina)
+    </button>
+
+    <!-- NUEVO: Botón para iniciar GPS (Solo visible en Celular) -->
+    <button onclick="activarGPS()" id="btn-gps" style="display: none; width: 100%; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 15px;">
+        📡 Iniciar Seguimiento (Modo Repartidor)
     </button>
 
     <!-- Botón para mostrar/ocultar (Solo celular) -->
