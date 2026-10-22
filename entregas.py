@@ -196,35 +196,54 @@ def ubicacion():
         lat = data.get("lat")
         lon = data.get("lon")
         
-        # Guardamos la ubicación en una tabla de un solo registro
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS repartidor_actual (
-                id INTEGER PRIMARY KEY DEFAULT 1,
-                latitud REAL,
-                longitud REAL,
-                actualizado TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # Borramos la anterior y guardamos la nueva
-        cursor.execute("DELETE FROM repartidor_actual")
-        cursor.execute("INSERT INTO repartidor_actual (latitud, longitud) VALUES (%s, %s)", (lat, lon))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({"status": "ok"})
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            # Creamos la tabla si no existe
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS repartidor_actual (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    latitud REAL,
+                    longitud REAL,
+                    actualizado TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute("DELETE FROM repartidor_actual")
+            cursor.execute("INSERT INTO repartidor_actual (id, latitud, longitud) VALUES (1, %s, %s)", (lat, lon))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "ok"})
+        except Exception as e:
+            print("Error guardando ubicacion:", e)
+            return jsonify({"error": str(e)}), 500
         
     if request.method == "GET":
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT latitud, longitud FROM repartidor_actual LIMIT 1")
-        res = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        if res:
-            return jsonify(res)
-        return jsonify({"latitud": None, "longitud": None})
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            # Nos aseguramos de que la tabla exista para poder leer
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS repartidor_actual (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    latitud REAL,
+                    longitud REAL,
+                    actualizado TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            
+            cursor.execute("SELECT latitud, longitud FROM repartidor_actual LIMIT 1")
+            res = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if res and res['latitud']:
+                return jsonify(res)
+            return jsonify({"latitud": None, "longitud": None})
+        except Exception as e:
+            print("Error leyendo ubicacion:", e)
+            return jsonify({"error": str(e)}), 500
 
 @app.route("/api/ubicacion/apagar", methods=["POST"])
 def apagar_gps():
