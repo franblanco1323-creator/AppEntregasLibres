@@ -186,5 +186,88 @@ def obtener_coordenadas(direccion):
     
     return None, None
 
+@app.route("/api/ubicacion", methods=["POST", "GET"])
+def ubicacion():
+    if not session.get('logged_in'):
+        return jsonify({"error": "No autorizado"}), 401
+        
+    if request.method == "POST":
+        data = request.json
+        lat = data.get("lat")
+        lon = data.get("lon")
+        
+        # Guardamos la ubicación en una tabla de un solo registro
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS repartidor_actual (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                latitud REAL,
+                longitud REAL,
+                actualizado TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Borramos la anterior y guardamos la nueva
+        cursor.execute("DELETE FROM repartidor_actual")
+        cursor.execute("INSERT INTO repartidor_actual (latitud, longitud) VALUES (%s, %s)", (lat, lon))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"status": "ok"})
+        
+    if request.method == "GET":
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT latitud, longitud FROM repartidor_actual LIMIT 1")
+        res = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if res:
+            return jsonify(res)
+        return jsonify({"latitud": None, "longitud": None})
+
+@app.route("/api/ubicacion/apagar", methods=["POST"])
+def apagar_gps():
+    if not session.get('logged_in'):
+        return jsonify({"error": "No autorizado"}), 401
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM repartidor_actual") # Borramos la ubicación
+    # Creamos una tabla de control si no existe
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS control_gps (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            apagar BOOLEAN DEFAULT FALSE
+        )
+    ''')
+    # Insertamos el comando de apagado
+    cursor.execute("DELETE FROM control_gps")
+    cursor.execute("INSERT INTO control_gps (apagar) VALUES (TRUE)")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"mensaje": "Orden de apagado enviada"}), 200
+
+@app.route("/api/ubicacion/estado", methods=["GET"])
+def estado_gps():
+    # Esta ruta la consulta el celular para saber si debe apagarse
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT apagar FROM control_gps LIMIT 1")
+    res = cursor.fetchone()
+    
+    # Si está apagado, lo volvemos a poner en falso para la próxima vez
+    if res and res['apagar'] == True:
+        cursor.execute("DELETE FROM control_gps")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"apagar": True})
+        
+    cursor.close()
+    conn.close()
+    return jsonify({"apagar": False})
+
 if __name__ == "__main__":
     app.run(debug=True)
