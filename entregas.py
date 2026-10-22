@@ -270,23 +270,54 @@ def apagar_gps():
 
 @app.route("/api/ubicacion/estado", methods=["GET"])
 def estado_gps():
-    # Esta ruta la consulta el celular para saber si debe apagarse
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT apagar FROM control_gps LIMIT 1")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS control_gps (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            encender BOOLEAN DEFAULT FALSE,
+            apagar BOOLEAN DEFAULT FALSE
+        )
+    ''')
+    conn.commit()
+    cursor.execute("SELECT encender, apagar FROM control_gps LIMIT 1")
     res = cursor.fetchone()
     
-    # Si está apagado, lo volvemos a poner en falso para la próxima vez
-    if res and res['apagar'] == True:
-        cursor.execute("DELETE FROM control_gps")
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({"apagar": True})
-        
+    encender = False
+    apagar = False
+    
+    if res:
+        encender = res['encender']
+        apagar = res['apagar']
+        # Si hay una orden, la consumimos y borramos
+        if encender or apagar:
+            cursor.execute("DELETE FROM control_gps")
+            conn.commit()
+            
     cursor.close()
     conn.close()
-    return jsonify({"apagar": False})
+    return jsonify({"encender": encender, "apagar": apagar})
+    
+@app.route("/api/ubicacion/encender", methods=["POST"])
+def encender_gps():
+    if not session.get('logged_in'):
+        return jsonify({"error": "No autorizado"}), 401
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS control_gps (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            encender BOOLEAN DEFAULT FALSE,
+            apagar BOOLEAN DEFAULT FALSE
+        )
+    ''')
+    cursor.execute("DELETE FROM control_gps")
+    cursor.execute("INSERT INTO control_gps (encender, apagar) VALUES (TRUE, FALSE)")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"mensaje": "Orden de encendido enviada"}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
