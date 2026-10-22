@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App de Entregas</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f8f9fa; }
+        
+        .panel-contadores { 
+            background: #0056b3; color: white; padding: 15px; border-radius: 8px; 
+            margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .contador-num { font-size: 24px; font-weight: bold; }
+
+        /* Formulario: Por defecto se ve (PC) */
+        .formulario { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .formulario input { padding: 8px; margin-right: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        .contenedor-principal { display: flex; gap: 15px; flex-wrap: wrap; }
+        
+        .lista-entregas {
+            flex: 1; min-width: 300px; background: white; border-radius: 8px; padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-height: 500px; overflow-y: auto;
+        }
+        
+        .mapa-contenedor { flex: 2; min-width: 300px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #map { height: 500px; width: 100%; }
+
+        .tarjeta-entrega {
+            border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center;
+        }
+        .tarjeta-entrega:last-child { border-bottom: none; }
+        .info-entrega h4 { margin: 0 0 5px 0; color: #333; }
+        .info-entrega p { margin: 0; font-size: 13px; color: #666; }
+        
+        .botones-accion button { display: block; width: 100%; margin-top: 5px; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-entregado { background-color: #28a745; color: white; }
+        .btn-ruta { background-color: #007bff; color: white; }
+
+        /* Botón para ocultar lista (solo visible en celular) */
+        .btn-toggle-lista { display: none; width: 100%; padding: 10px; background: #6c757d; color: white; border: none; border-radius: 5px; margin-bottom: 10px; font-weight: bold; }
+
+        /* =========================================
+           MAGIA PARA CELULARES (Responsive)
+           ========================================= */
+        @media (max-width: 768px) {
+            /* Ocultamos el formulario de la oficina en el celular */
+            .formulario { display: none; }
+            
+            /* Mostramos el botón para ocultar la lista */
+            .btn-toggle-lista { display: block; }
+
+            /* Hacemos que la lista ocupe todo el ancho y el mapa quede abajo */
+            .contenedor-principal { flex-direction: column; }
+            .lista-entregas, .mapa-contenedor { width: 100%; min-width: 100%; }
+            
+            /* Achicamos un poco el alto del mapa en el celular */
+            #map { height: 400px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Panel de Contadores -->
+    <div class="panel-contadores">
+        <div>
+            <div>Destinos Pendientes:</div>
+            <div class="contador-num" id="contador-pendientes">0</div>
+        </div>
+        <div style="text-align: right; font-size: 13px; opacity: 0.8;">
+            (Última act.: <span id="hora-actualizacion">--:--</span>)
+        </div>
+    </div>
+
+    <!-- Formulario (Se oculta en celular con CSS) -->
+    <div class="formulario">
+        <h3 style="margin-top: 0;">Agregar nuevo destino (Oficina)</h3>
+        <input type="text" id="direccion" placeholder="Dirección (Ej: Bolivar 1334)" required>
+        <input type="text" id="destinatario" placeholder="Destinatario / Cliente" required>
+        <button onclick="agregarEntrega()" style="background: #0056b3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer;">Guardar Destino</button>
+    </div>
+
+    <!-- Botón para mostrar/ocultar lista (Solo celular) -->
+    <button class="btn-toggle-lista" onclick="toggleLista()" id="btn-toggle">▼ Mostrar / Ocultar Hoja de Ruta</button>
+
+    <div class="contenedor-principal">
+        <!-- Lista -->
+        <div class="lista-entregas" id="contenedor-lista-padre">
+            <h3 style="margin-top: 0;">Hoja de Ruta</h3>
+            <div id="contenedor-lista"></div>
+        </div>
+
+        <!-- Mapa -->
+        <div class="mapa-contenedor">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        const map = L.map('map').setView([-29.7119, -57.0828], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+        let marcadores = [];
+        let entregasActuales = [];
+
+        // Función para ocultar/mostrar la lista en el celular
+        function toggleLista() {
+            const lista = document.getElementById('contenedor-lista-padre');
+            const btn = document.getElementById('btn-toggle');
+            if (lista.style.display === 'none') {
+                lista.style.display = 'block';
+                btn.innerText = '▲ Ocultar Hoja de Ruta';
+            } else {
+                lista.style.display = 'none';
+                btn.innerText = '▼ Mostrar Hoja de Ruta';
+            }
+            // Importante: al ocultar/mostrar, obligamos al mapa a recalcular su tamaño
+            setTimeout(() => { map.invalidateSize(); }, 100);
+        }
+
+                const iconoEntrega = L.divIcon({
+            // Flask por defecto sirve los archivos de la carpeta "static"
+            html: '<img src="/static/damgata.jpeg" style="width: 100%; height: 100%; object-fit: contain;">',
+            className: 'custom-icon', 
+            iconSize: [40, 40], 
+            iconAnchor: [20, 40] 
+        });
+
+        async function cargarEntregas(moverMapaA = null) {
+            const response = await fetch('/api/entregas');
+            const nuevasEntregas = await response.json();
+            
+            // Aviso de nueva entrega
+            if (entregasActuales.length > 0 && nuevasEntregas.length > entregasActuales.length) {
+                alert("🔔 ¡ATENCIÓN! La oficina acaba de agregar un nuevo destino.");
+            }
+            entregasActuales = nuevasEntregas;
+
+            document.getElementById('contador-pendientes').innerText = nuevasEntregas.length;
+            document.getElementById('hora-actualizacion').innerText = new Date().toLocaleTimeString();
+
+            marcadores.forEach(m => map.removeLayer(m));
+            marcadores = [];
+            const contenedorLista = document.getElementById('contenedor-lista');
+            contenedorLista.innerHTML = '';
+            let bounds = L.latLngBounds();
+
+            if (nuevasEntregas.length === 0) {
+                contenedorLista.innerHTML = '<p style="color: #666; text-align: center;">No hay entregas pendientes. ¡Buen trabajo!</p>';
+            }
+
+            nuevasEntregas.forEach(entrega => {
+                // Mapa
+                if (entrega.latitud && entrega.longitud) {
+                    const marker = L.marker([entrega.latitud, entrega.longitud], {icon: iconoEntrega}).addTo(map);
+                    const botonesHtml = `
+                        <div style="text-align: center; margin-top: 10px; display: flex; flex-direction: column; gap: 5px;">
+                            <button onclick="completarEntrega(${entrega.id})" style="background-color: #28a745; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">✅ Entregado</button>
+                            <button onclick="trazarRuta(${entrega.latitud}, ${entrega.longitud})" style="background-color: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">📍 Ir</button>
+                        </div>`;
+                    marker.bindPopup(`<b>🛵 ${entrega.destinatario}</b><br>📍 ${entrega.direccion}${botonesHtml}`);
+                    marcadores.push(marker);
+                    bounds.extend([entrega.latitud, entrega.longitud]);
+
+                    if (moverMapaA && moverMapaA === entrega.destinatario) {
+                        map.setView([entrega.latitud, entrega.longitud], 16); 
+                        marker.openPopup(); 
+                    }
+                }
+
+                // Lista
+                const tarjeta = document.createElement('div');
+                tarjeta.className = 'tarjeta-entrega';
+                tarjeta.innerHTML = `
+                    <div class="info-entrega">
+                        <h4>${entrega.destinatario}</h4>
+                        <p>📍 ${entrega.direccion}</p>
+                    </div>
+                    <div class="botones-accion">
+                        <button class="btn-ruta" onclick="trazarRuta(${entrega.latitud}, ${entrega.longitud})">📍 Ir</button>
+                        <button class="btn-entregado" onclick="completarEntrega(${entrega.id})">✅ Listo</button>
+                    </div>
+                `;
+                contenedorLista.appendChild(tarjeta);
+            });
+            
+            if (!moverMapaA && marcadores.length > 0) {
+                map.fitBounds(bounds, {padding: [50, 50]});
+            }
+        }
+
+        async function agregarEntrega() {
+            const dir = document.getElementById('direccion').value;
+            const dest = document.getElementById('destinatario').value;
+            if (!dir || !dest) return alert("Completa ambos campos");
+
+            const btn = document.querySelector('.formulario button');
+            btn.innerText = "Buscando..."; btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/entregas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ direccion: dir, destinatario: dest })
+                });
+                const result = await response.json();
+                document.getElementById('direccion').value = '';
+                document.getElementById('destinatario').value = '';
+                
+                if (result.encontrado === false) alert("⚠️ Se guardó, pero no se ubicó en el mapa exacto.");
+                cargarEntregas(result.encontrado ? dest : null); 
+            } catch (error) {
+                alert("Error al guardar.");
+            } finally {
+                btn.innerText = "Guardar Destino"; btn.disabled = false;
+            }
+        }
+
+        async function completarEntrega(id) {
+            if(confirm("¿Confirmás que esta entrega ya fue realizada?")) {
+                await fetch(`/api/entregas/${id}/completar`, { method: 'PUT' });
+                cargarEntregas(); 
+            }
+        }
+
+        function trazarRuta(lat, lon) {
+            if (!lat || !lon) return alert("Esta dirección no tiene coordenadas exactas en el mapa.");
+            
+            navigator.geolocation.getCurrentPosition((position) => {
+                const latRepartidor = position.coords.latitude;
+                const lonRepartidor = position.coords.longitude;
+                if (window.rutaActual) { map.removeControl(window.rutaActual); }
+
+                window.rutaActual = L.Routing.control({
+                    waypoints: [ L.latLng(latRepartidor, lonRepartidor), L.latLng(lat, lon) ],
+                    language: 'es', show: false,
+                    lineOptions: { styles: [{color: 'blue', weight: 5}] },
+                    createMarker: function() { return null; }
+                }).addTo(map);
+            }, () => {
+                alert("Activá el GPS para trazar la ruta.");
+            });
+        }
+
+        cargarEntregas();
+        setInterval(() => { cargarEntregas(); }, 30000);
+    </script>
+</body>
+</html>
