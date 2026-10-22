@@ -289,6 +289,7 @@
                 if (btn) {
                     btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
                     btn.style.backgroundColor = "#dc3545";
+                    btn.style.display = 'block'; // <-- AGREGÁ ESTA LÍNEA ACÁ
                 }
                 alert("Seguimiento pausado.");
             } else {
@@ -331,6 +332,7 @@
                     if (btn) {
                         btn.innerText = "🛑 Detener Seguimiento (GPS Activo)";
                         btn.style.backgroundColor = "#28a745";
+                        btn.style.display = 'none'; 
                     }
                     alert("Seguimiento activado. Mantené la pantalla encendida.");
                 } else {
