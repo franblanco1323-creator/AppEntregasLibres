@@ -316,7 +316,7 @@
         }
         
         // Actualizar posición del repartidor en la PC
-        let marcadorRepartidor = null;
+                let marcadorRepartidor = null;
         async function actualizarUbicacionRepartidor() {
             try {
                 const res = await fetch('/api/ubicacion');
@@ -328,14 +328,17 @@
                         className: 'custom-icon', iconSize: [30, 30], iconAnchor: [15, 15]
                     });
 
-                    if (marcadorRepartidor) {
+                    // Verificamos que el mapa exista antes de intentar poner el marcador
+                    if (marcadorRepartidor && map.hasLayer(marcadorRepartidor)) {
                         marcadorRepartidor.setLatLng([data.latitud, data.longitud]);
                     } else {
                         marcadorRepartidor = L.marker([data.latitud, data.longitud], {icon: iconoRepartidor}).addTo(map);
                         marcadorRepartidor.bindPopup("<b>Repartidor en camino</b>");
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.log("Esperando datos del repartidor...");
+            }
         }
         setInterval(actualizarUbicacionRepartidor, 15000);
     </script>
