@@ -231,23 +231,27 @@
         }
 
         function trazarRuta(lat, lon) {
-            if (!lat || !lon) return alert("Esta dirección no tiene coordenadas exactas en el mapa.");
-            
-            navigator.geolocation.getCurrentPosition((position) => {
-                const latRepartidor = position.coords.latitude;
-                const lonRepartidor = position.coords.longitude;
-                if (window.rutaActual) { map.removeControl(window.rutaActual); }
+    if (!lat || !lon) return alert("Esta dirección no tiene coordenadas exactas en el mapa.");
+    
+    navigator.geolocation.getCurrentPosition((position) => {
+        const latRepartidor = position.coords.latitude;
+        const lonRepartidor = position.coords.longitude;
+        if (window.rutaActual) { map.removeControl(window.rutaActual); }
 
-                window.rutaActual = L.Routing.control({
-                    waypoints: [ L.latLng(latRepartidor, lonRepartidor), L.latLng(lat, lon) ],
-                    language: 'es', show: false,
-                    lineOptions: { styles: [{color: 'blue', weight: 5}] },
-                    createMarker: function() { return null; }
-                }).addTo(map);
-            }, () => {
-                alert("Activá el GPS para trazar la ruta.");
-            });
-        }
+        window.rutaActual = L.Routing.control({
+            waypoints: [ L.latLng(latRepartidor, lonRepartidor), L.latLng(lat, lon) ],
+            language: 'es', show: false,
+            lineOptions: { styles: [{color: 'blue', weight: 5}] },
+            createMarker: function() { return null; },
+            // Este es el servidor de la comunidad de OSM (más estable que el demo)
+            router: L.Routing.osrmv1({
+                serviceUrl: 'https://routing.openstreetmap.de/routed-car/route/v1'
+            })
+        }).addTo(map);
+    }, () => {
+        alert("Activá el GPS para trazar la ruta.");
+    });
+}
 
         cargarEntregas();
         setInterval(() => { cargarEntregas(); }, 30000);
