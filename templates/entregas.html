@@ -30,6 +30,10 @@
             flex: 1; min-width: 300px; background: white; border-radius: 8px; padding: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-height: 500px; overflow-y: auto;
         }
+
+        <button onclick="detenerRepartidor()" style="width: 100%; padding: 10px; background: #ffc107; color: black; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 10px;">
+    🛑 Detener GPS del Repartidor (Solo Oficina)
+</button>
         
         .mapa-contenedor { flex: 2; min-width: 300px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         #map { height: 500px; width: 100%; }
@@ -61,6 +65,8 @@
             /* Hacemos que la lista ocupe todo el ancho y el mapa quede abajo */
             .contenedor-principal { flex-direction: column; }
             .lista-entregas, .mapa-contenedor { width: 100%; min-width: 100%; }
+             /* Ocultamos el mapa por defecto en el celular */
+            .mapa-contenedor { display: none; }
             
             /* Achicamos un poco el alto del mapa en el celular */
             #map { height: 400px; }
@@ -89,7 +95,8 @@
     </div>
 
     <!-- Botón para mostrar/ocultar lista (Solo celular) -->
-    <button class="btn-toggle-lista" onclick="toggleLista()" id="btn-toggle">▼ Mostrar / Ocultar Hoja de Ruta</button>
+      <!-- Botón para mostrar/ocultar (Solo celular) -->
+    <button class="btn-toggle-lista" onclick="toggleVistas()" id="btn-toggle">▼ Mostrar Mapa y Ruta</button>
 
     <div class="contenedor-principal">
         <!-- Lista -->
@@ -112,17 +119,24 @@
         let entregasActuales = [];
 
         // Función para ocultar/mostrar la lista en el celular
-        function toggleLista() {
+              function toggleVistas() {
             const lista = document.getElementById('contenedor-lista-padre');
+            const mapa = document.querySelector('.mapa-contenedor');
             const btn = document.getElementById('btn-toggle');
+
+            // Si la lista está oculta, mostramos todo (lista + mapa)
             if (lista.style.display === 'none') {
                 lista.style.display = 'block';
-                btn.innerText = '▲ Ocultar Hoja de Ruta';
+                mapa.style.display = 'block';
+                btn.innerText = '▲ Ocultar Mapa y Ruta';
             } else {
+                // Si está visible, ocultamos todo
                 lista.style.display = 'none';
-                btn.innerText = '▼ Mostrar Hoja de Ruta';
+                mapa.style.display = 'none';
+                btn.innerText = '▼ Mostrar Mapa y Ruta';
             }
-            // Importante: al ocultar/mostrar, obligamos al mapa a recalcular su tamaño
+            
+            // Recalculamos el tamaño del mapa
             setTimeout(() => { map.invalidateSize(); }, 100);
         }
 
@@ -252,6 +266,71 @@
 
         cargarEntregas();
         setInterval(() => { cargarEntregas(); }, 30000);
+
+        // Función para que la PC envíe la orden de apagado
+async function detenerRepartidor() {
+    if(confirm("¿Seguro que querés detener el seguimiento del repartidor de forma remota?")) {
+        await fetch('/api/ubicacion/apagar', { method: 'POST' });
+        alert("Se envió la orden. El celular del repartidor se apagará en los próximos segundos.");
+        // Borramos el pin del repartidor de tu mapa
+        if (marcadorRepartidor) {
+            map.removeLayer(marcadorRepartidor);
+            marcadorRepartidor = null;
+        }
+    }
+}
+
+// Modificamos la función del GPS del celular para que consulte si lo apagaron
+// Buscá la función activarGPS() y cambiala por esta:
+
+let watchId = null;
+let intervaloChequeo = null; // Nuevo intervalo
+
+function activarGPS() {
+    const btn = document.getElementById('btn-gps');
+    if (watchId) {
+        // Apagado manual desde el celular
+        navigator.geolocation.clearWatch(watchId);
+        clearInterval(intervaloChequeo);
+        watchId = null;
+        btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
+        btn.style.backgroundColor = "#dc3545";
+        alert("Seguimiento pausado.");
+    } else {
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition((position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                fetch('/api/ubicacion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: lat, lon: lon })
+                });
+            }, (error) => {
+                alert("Error al obtener GPS.");
+            }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
+            
+            // NUEVO: Cada 10 segundos consulta a la PC si lo apagaron
+            intervaloChequeo = setInterval(async () => {
+                const res = await fetch('/api/ubicacion/estado');
+                const data = await res.json();
+                if (data.apagar) {
+                    // Si la PC le dijo que se apague, lo apagamos
+                    navigator.geolocation.clearWatch(watchId);
+                    clearInterval(intervaloChequeo);
+                    watchId = null;
+                    btn.innerText = "📡 Iniciar Seguimiento (Modo Repartidor)";
+                    btn.style.backgroundColor = "#dc3545";
+                    alert("⚠️ La oficina ha detenido el seguimiento de forma remota.");
+                }
+            }, 10000);
+            
+            btn.innerText = "🛑 Detener Seguimiento (GPS Activo)";
+            btn.style.backgroundColor = "#28a745";
+            alert("Seguimiento activado.");
+        }
+    }
+}
     </script>
 </body>
 </html>
