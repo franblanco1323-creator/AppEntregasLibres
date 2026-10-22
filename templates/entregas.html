@@ -86,12 +86,12 @@
         <button onclick="agregarEntrega()" style="background: #0056b3; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer;">Guardar Destino</button>
     </div>
 
-      <!-- Botón para detener GPS (Solo visible en PC) -->
-    <button onclick="detenerRepartidor()" id="btn-detener-gps" style="width: 100%; padding: 10px; background: #ffc107; color: black; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 15px;">
+        <!-- Botón para detener GPS (Oculto por defecto) -->
+    <button onclick="detenerRepartidor()" id="btn-detener-gps" style="display: none; width: 100%; padding: 10px; background: #ffc107; color: black; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 15px;">
         🛑 Detener GPS del Repartidor (Solo Oficina)
     </button>
 
-    <!-- NUEVO: Botón para iniciar GPS (Solo visible en Celular) -->
+    <!-- Botón para iniciar GPS (Oculto por defecto) -->
     <button onclick="activarGPS()" id="btn-gps" style="display: none; width: 100%; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px; font-weight: bold; margin-bottom: 15px;">
         📡 Iniciar Seguimiento (Modo Repartidor)
     </button>
@@ -376,6 +376,24 @@
         
         // Consultamos cada 15 segundos
         setInterval(actualizarUbicacionRepartidor, 15000);
+                // ==========================================
+        // LÓGICA DE VISIBILIDAD SEGÚN EL DISPOSITIVO
+        // ==========================================
+        window.addEventListener('load', () => {
+            const esComputadora = window.innerWidth > 768;
+            const btnOficina = document.getElementById('btn-detener-gps');
+            const btnRepartidor = document.getElementById('btn-gps');
+
+            if (esComputadora) {
+                // Si estoy en la PC, muestro solo el botón de la oficina
+                if (btnOficina) btnOficina.style.display = 'block';
+                if (btnRepartidor) btnRepartidor.style.display = 'none';
+            } else {
+                // Si estoy en el celular, muestro solo el botón del repartidor
+                if (btnOficina) btnOficina.style.display = 'none';
+                if (btnRepartidor) btnRepartidor.style.display = 'block';
+            }
+        });
     </script>
 </body>
 </html>
