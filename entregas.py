@@ -26,6 +26,7 @@ def init_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        # 1. Tabla de entregas
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS entregas (
                 id SERIAL PRIMARY KEY,
@@ -36,6 +37,18 @@ def init_db():
                 longitud REAL
             )
         ''')
+        
+        # 2. LIMPIEZA DE LA TABLA DE CONTROL (Para arreglar el error del celular)
+        # Borramos la tabla vieja (si existe) y creamos la nueva con las columnas correctas
+        cursor.execute("DROP TABLE IF EXISTS control_gps")
+        cursor.execute('''
+            CREATE TABLE control_gps (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                encender BOOLEAN DEFAULT FALSE,
+                apagar BOOLEAN DEFAULT FALSE
+            )
+        ''')
+        
         conn.commit()
         cursor.close()
         conn.close()
