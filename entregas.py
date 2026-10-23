@@ -250,74 +250,91 @@ def apagar_gps():
     if not session.get('logged_in'):
         return jsonify({"error": "No autorizado"}), 401
         
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM repartidor_actual") # Borramos la ubicación
-    # Creamos una tabla de control si no existe
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS control_gps (
-            id INTEGER PRIMARY KEY DEFAULT 1,
-            apagar BOOLEAN DEFAULT FALSE
-        )
-    ''')
-    # Insertamos el comando de apagado
-    cursor.execute("DELETE FROM control_gps")
-    cursor.execute("INSERT INTO control_gps (apagar) VALUES (TRUE)")
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"mensaje": "Orden de apagado enviada"}), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM repartidor_actual") # Borramos la ubicación
+        
+        # BORRAMOS LA TABLA VIEJA y creamos una nueva con las columnas correctas
+        cursor.execute("DROP TABLE IF EXISTS control_gps")
+        cursor.execute('''
+            CREATE TABLE control_gps (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                encender BOOLEAN DEFAULT FALSE,
+                apagar BOOLEAN DEFAULT FALSE
+            )
+        ''')
+        cursor.execute("INSERT INTO control_gps (encender, apagar) VALUES (FALSE, TRUE)")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"mensaje": "Orden de apagado enviada"}), 200
+    except Exception as e:
+        print("Error apagando:", e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/ubicacion/estado", methods=["GET"])
 def estado_gps():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS control_gps (
-            id INTEGER PRIMARY KEY DEFAULT 1,
-            encender BOOLEAN DEFAULT FALSE,
-            apagar BOOLEAN DEFAULT FALSE
-        )
-    ''')
-    conn.commit()
-    cursor.execute("SELECT encender, apagar FROM control_gps LIMIT 1")
-    res = cursor.fetchone()
-    
-    encender = False
-    apagar = False
-    
-    if res:
-        encender = res['encender']
-        apagar = res['apagar']
-        # Si hay una orden, la consumimos y borramos
-        if encender or apagar:
-            cursor.execute("DELETE FROM control_gps")
-            conn.commit()
-            
-    cursor.close()
-    conn.close()
-    return jsonify({"encender": encender, "apagar": apagar})
-    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # Por si la tabla no existe (primera vez que se usa)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS control_gps (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                encender BOOLEAN DEFAULT FALSE,
+                apagar BOOLEAN DEFAULT FALSE
+            )
+        ''')
+        conn.commit()
+        
+        cursor.execute("SELECT encender, apagar FROM control_gps LIMIT 1")
+        res = cursor.fetchone()
+        
+        encender = False
+        apagar = False
+        
+        if res:
+            encender = res['encender']
+            apagar = res['apagar']
+            # Si hay una orden, la consumimos y borramos
+            if encender or apagar:
+                cursor.execute("DELETE FROM control_gps")
+                conn.commit()
+                
+        cursor.close()
+        conn.close()
+        return jsonify({"encender": encender, "apagar": apagar})
+    except Exception as e:
+        print("Error consultando estado:", e)
+        return jsonify({"encender": False, "apagar": False})
+
 @app.route("/api/ubicacion/encender", methods=["POST"])
 def encender_gps():
     if not session.get('logged_in'):
         return jsonify({"error": "No autorizado"}), 401
         
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS control_gps (
-            id INTEGER PRIMARY KEY DEFAULT 1,
-            encender BOOLEAN DEFAULT FALSE,
-            apagar BOOLEAN DEFAULT FALSE
-        )
-    ''')
-    cursor.execute("DELETE FROM control_gps")
-    cursor.execute("INSERT INTO control_gps (encender, apagar) VALUES (TRUE, FALSE)")
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"mensaje": "Orden de encendido enviada"}), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # BORRAMOS LA TABLA VIEJA y creamos una nueva
+        cursor.execute("DROP TABLE IF EXISTS control_gps")
+        cursor.execute('''
+            CREATE TABLE control_gps (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                encender BOOLEAN DEFAULT FALSE,
+                apagar BOOLEAN DEFAULT FALSE
+            )
+        ''')
+        cursor.execute("INSERT INTO control_gps (encender, apagar) VALUES (TRUE, FALSE)")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"mensaje": "Orden de encendido enviada"}), 200
+    except Exception as e:
+        print("Error encendiendo:", e)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
